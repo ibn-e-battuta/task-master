@@ -5,6 +5,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import io.shinmen.taskmaster.entity.User;
+import io.shinmen.taskmaster.exception.UserNotFoundException;
 import io.shinmen.taskmaster.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 
@@ -22,9 +23,9 @@ public class UserService {
     }
 
     @Transactional
-    public void updateProfile(String username, User updatedUser) throws Exception {
+    public void updateProfile(String username, User updatedUser) {
         User existingUser = userRepository.findByUsername(username)
-            .orElseThrow(() -> new Exception("User not found."));
+            .orElseThrow(() -> new UserNotFoundException("User not found."));
 
         existingUser.setUsername(updatedUser.getUsername());
         existingUser.setEmail(updatedUser.getEmail());

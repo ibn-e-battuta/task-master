@@ -20,6 +20,8 @@ import io.shinmen.taskmaster.dto.RefreshTokenResponse;
 import io.shinmen.taskmaster.dto.RegisterRequest;
 import io.shinmen.taskmaster.entity.RefreshToken;
 import io.shinmen.taskmaster.entity.User;
+import io.shinmen.taskmaster.exception.TokenExpiredException;
+import io.shinmen.taskmaster.exception.TokenNotFoundException;
 import io.shinmen.taskmaster.service.AuthService;
 import io.shinmen.taskmaster.service.RefreshTokenService;
 import jakarta.validation.Valid;
@@ -35,53 +37,47 @@ public class AuthController {
 
     @PostMapping("/register")
     public ResponseEntity<ApiResponse> registerUser(@Valid @RequestBody RegisterRequest registerRequest) {
-        try {
-            // Create User entity from DTO
-            User user = User.builder()
-                    .username(registerRequest.getUsername())
-                    .email(registerRequest.getEmail())
-                    .build();
+        User user = User.builder()
+                .username(registerRequest.getUsername())
+                .email(registerRequest.getEmail())
+                .build();
 
-            authService.registerUser(user, registerRequest.getPassword());
+        authService.registerUser(user, registerRequest.getPassword());
 
-            return ResponseEntity.status(HttpStatus.CREATED).body(
-                    new ApiResponse(true, "User registered successfully. Please check your email for verification."));
-        } catch (Exception ex) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(new ApiResponse(false, ex.getMessage()));
-        }
+        ApiResponse response = ApiResponse.builder()
+                .success(true)
+                .message("User registered successfully. Please check your email for verification.")
+                .build();
+
+        return new ResponseEntity<>(response, HttpStatus.CREATED);
     }
 
     @GetMapping("/verify")
-    public ResponseEntity<?> verifyUser(@RequestParam("token") String token) {
-        try {
-            authService.verifyEmail(token);
-            return ResponseEntity.ok(new ApiResponse(true, "Email verified successfully."));
-        } catch (Exception ex) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(new ApiResponse(false, ex.getMessage()));
-        }
+    public ResponseEntity<ApiResponse> verifyUser(@RequestParam String token) {
+        authService.verifyEmail(token);
+
+        ApiResponse response = ApiResponse.builder()
+                .success(true)
+                .message("Email verified successfully.")
+                .build();
+
+        return ResponseEntity.ok(response);
     }
 
     @PostMapping("/login")
-    public ResponseEntity<?> authenticateUser(@Valid @RequestBody LoginRequest loginRequest) {
-        try {
-            AuthResponse authResponse = authService.authenticateUserWithRefreshToken(
-                    loginRequest.getUsernameOrEmail(),
-                    loginRequest.getPassword());
-            return ResponseEntity.ok(authResponse);
-        } catch (Exception ex) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                    .body(new ApiResponse(false, ex.getMessage()));
-        }
+    public ResponseEntity<AuthResponse> authenticateUser(@Valid @RequestBody LoginRequest loginRequest)
+            throws Exception {
+        AuthResponse authResponse = authService.authenticateUserWithRefreshToken(
+                loginRequest.getUsername(),
+                loginRequest.getPassword());
+        return ResponseEntity.ok(authResponse);
     }
 
     @PostMapping("/password-reset-request")
-    public ResponseEntity<ApiResponse> requestPasswordReset(@Valid @RequestBody PasswordResetRequest request) {
-        try {
-            authService.initiatePasswordReset(request.getEmail());
-            return ResponseEntity.ok(new ApiResponse(true, "Password reset email sent."));
-        } catch (Exception ex) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(new ApiResponse(false, ex.getMessage()));
-        }
+    public ResponseEntity<ApiResponse> requestPasswordReset(@Valid @RequestBody PasswordResetRequest request)
+            throws Exception {
+        authService.initiatePasswordReset(request.getEmail());
+        return ResponseEntity.ok(new ApiResponse(true, "Password reset email sent."));
     }
 
     @PostMapping("/password-reset")
@@ -95,21 +91,32 @@ public class AuthController {
     }
 
     @PostMapping("/logout")
-    public ResponseEntity<?> logoutUser(@RequestHeader(name = "Authorization") String authorizationHeader) {
+    public ResponseEntity<ApiResponse> logoutUser(@RequestHeader(name = "Authorization") String authorizationHeader) {
         if (authorizationHeader != null && authorizationHeader.startsWith("Bearer ")) {
             String token = authorizationHeader.substring(7);
             authService.logoutUser(token);
-            return ResponseEntity.ok(new ApiResponse(true, "Logged out successfully."));
+
+            ApiResponse response = ApiResponse.builder()
+                    .success(true)
+                    .message("Logged out successfully.")
+                    .build();
+
+            return ResponseEntity.ok(response);
         }
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(new ApiResponse(false, "Invalid Authorization header."));
+
+        ApiResponse response = ApiResponse.builder()
+                .success(false)
+                .message("Invalid Authorization header.")
+                .build();
+
+        return new ResponseEntity<>(response, HttpStatus.BAD_REQUEST);
     }
 
     @PostMapping("/refresh-token")
     public ResponseEntity<?> refreshToken(@Valid @RequestBody RefreshTokenRequest request) {
         try {
             RefreshToken refreshToken = refreshTokenService.findByToken(request.getRefreshToken())
-                    .orElseThrow(() -> new Exception("Refresh token not found."));
+                    .orElseThrow(() -> new TokenNotFoundException("Refresh token not found."));
 
             refreshTokenService.verifyExpiration(refreshToken);
 
@@ -126,8 +133,18 @@ public class AuthController {
                     .build();
 
             return ResponseEntity.ok(response);
+        } catch (TokenNotFoundException | TokenExpiredException ex) {
+            ApiResponse apiResponse = ApiResponse.builder()
+                    .success(false)
+                    .message(ex.getMessage())
+                    .build();
+            return new ResponseEntity<>(apiResponse, HttpStatus.FORBIDDEN);
         } catch (Exception ex) {
-            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(new ApiResponse(false, ex.getMessage()));
+            ApiResponse apiResponse = ApiResponse.builder()
+                    .success(false)
+                    .message("Could not refresh token.")
+                    .build();
+            return new ResponseEntity<>(apiResponse, HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
 }

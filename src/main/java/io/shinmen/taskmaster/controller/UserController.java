@@ -44,7 +44,7 @@ public class UserController {
 
     @PutMapping("/me")
     public ResponseEntity<?> updateProfile(Authentication authentication, @Valid @RequestBody UpdateProfileRequest updateRequest) {
-        try {
+
             String username = authentication.getName();
             User updatedUser = User.builder()
                 .username(updateRequest.getUsername())
@@ -54,9 +54,6 @@ public class UserController {
 
             userService.updateProfile(username, updatedUser);
             return ResponseEntity.ok(new ApiResponse(true, "Profile updated successfully."));
-        } catch (Exception ex) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(new ApiResponse(false, ex.getMessage()));
-        }
     }
 
     @PutMapping("/me/password")

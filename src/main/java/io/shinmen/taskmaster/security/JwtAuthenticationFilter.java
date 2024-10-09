@@ -10,9 +10,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
 
-import io.shinmen.taskmaster.service.CustomUserDetailsService;
 import io.shinmen.taskmaster.service.TokenBlacklistService;
-import io.shinmen.taskmaster.util.JwtTokenProvider;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -33,7 +31,13 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                                     FilterChain filterChain) throws ServletException, IOException {
         String jwt = getJwtFromRequest(request);
 
-        if (StringUtils.hasText(jwt) && tokenProvider.validateToken(jwt) && !tokenBlacklistService.isTokenBlacklisted(jwt)) {
+        if (StringUtils.hasText(jwt) && tokenProvider.validateToken(jwt)) {
+
+            if (tokenBlacklistService.isTokenBlacklisted(jwt)) {
+                response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Token has been blacklisted.");
+                return;
+            }
+
             String username = tokenProvider.getUsernameFromJWT(jwt);
 
             UserDetails userDetails = customUserDetailsService.loadUserByUsername(username);

@@ -33,39 +33,44 @@ public class DataInitializer implements CommandLineRunner {
         Permission assignTask = createPermission("ASSIGN_TASK");
 
         // Define Roles and assign Permissions
-        Role admin = Role.builder()
-                .name("ADMIN")
-                .permissions(new HashSet<>(Arrays.asList(
-                        createProject, deleteProject, viewProject,
-                        createTask, deleteTask, viewTask, updateTask, assignTask
-                )))
-                .build();
-        roleRepository.save(admin);
 
-        Role projectManager = Role.builder()
-                .name("PROJECT_MANAGER")
-                .permissions(new HashSet<>(Arrays.asList(
-                        createProject, deleteProject, viewProject,
-                        createTask, deleteTask, viewTask, updateTask, assignTask
-                )))
-                .build();
-        roleRepository.save(projectManager);
+        if (!roleRepository.findByName("ADMIN").isPresent()) {
+            Role admin = Role.builder()
+                    .name("ADMIN")
+                    .permissions(new HashSet<>(Arrays.asList(
+                            createProject, deleteProject, viewProject,
+                            createTask, deleteTask, viewTask, updateTask, assignTask)))
+                    .build();
+            roleRepository.save(admin);
+        }
 
-        Role teamMember = Role.builder()
-                .name("TEAM_MEMBER")
-                .permissions(new HashSet<>(Arrays.asList(
-                        viewProject, viewTask, updateTask, assignTask
-                )))
-                .build();
-        roleRepository.save(teamMember);
+        if (!roleRepository.findByName("PROJECT_MANAGER").isPresent()) {
+            Role projectManager = Role.builder()
+                    .name("PROJECT_MANAGER")
+                    .permissions(new HashSet<>(Arrays.asList(
+                            createProject, deleteProject, viewProject,
+                            createTask, deleteTask, viewTask, updateTask, assignTask)))
+                    .build();
+            roleRepository.save(projectManager);
+        }
 
-        Role viewer = Role.builder()
-                .name("VIEWER")
-                .permissions(new HashSet<>(Arrays.asList(
-                        viewProject, viewTask
-                )))
-                .build();
-        roleRepository.save(viewer);
+        if (!roleRepository.findByName("TEAM_MEMBER").isPresent()) {
+            Role teamMember = Role.builder()
+                    .name("TEAM_MEMBER")
+                    .permissions(new HashSet<>(Arrays.asList(
+                            viewProject, viewTask, updateTask, assignTask)))
+                    .build();
+            roleRepository.save(teamMember);
+        }
+
+        if (!roleRepository.findByName("VIEWER").isPresent()) {
+            Role viewer = Role.builder()
+                    .name("VIEWER")
+                    .permissions(new HashSet<>(Arrays.asList(
+                            viewProject, viewTask)))
+                    .build();
+            roleRepository.save(viewer);
+        }
     }
 
     private Permission createPermission(String name) {

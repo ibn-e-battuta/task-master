@@ -1,4 +1,4 @@
-package io.shinmen.taskmaster.util;
+package io.shinmen.taskmaster.security;
 
 import java.security.Key;
 import java.util.Date;
@@ -36,7 +36,7 @@ public class JwtTokenProvider {
 
     public String generateToken(Authentication authentication) {
         String username = authentication.getName();
-        // Assuming roles are authorities
+
         String authorities = authentication.getAuthorities().stream()
                 .map(GrantedAuthority::getAuthority)
                 .collect(Collectors.joining(","));
@@ -54,7 +54,6 @@ public class JwtTokenProvider {
     }
 
     public String generateTokenFromUser(User user) {
-        // Extract authorities from user's roles and permissions
         String authorities = user.getRoles().stream()
                 .flatMap(role -> role.getPermissions().stream())
                 .map(Permission::getName)

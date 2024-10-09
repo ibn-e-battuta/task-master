@@ -21,11 +21,17 @@ import io.shinmen.taskmaster.entity.RefreshToken;
 import io.shinmen.taskmaster.entity.Role;
 import io.shinmen.taskmaster.entity.User;
 import io.shinmen.taskmaster.entity.VerificationToken;
+import io.shinmen.taskmaster.exception.InvalidCredentialsException;
+import io.shinmen.taskmaster.exception.RoleNotFoundException;
+import io.shinmen.taskmaster.exception.TokenExpiredException;
+import io.shinmen.taskmaster.exception.UserAlreadyExistsException;
+import io.shinmen.taskmaster.exception.UserNotFoundException;
+import io.shinmen.taskmaster.exception.VerificationTokenNotFoundException;
 import io.shinmen.taskmaster.repository.PasswordResetTokenRepository;
 import io.shinmen.taskmaster.repository.RoleRepository;
 import io.shinmen.taskmaster.repository.UserRepository;
 import io.shinmen.taskmaster.repository.VerificationTokenRepository;
-import io.shinmen.taskmaster.util.JwtTokenProvider;
+import io.shinmen.taskmaster.security.JwtTokenProvider;
 import lombok.RequiredArgsConstructor;
 
 @Service
@@ -50,28 +56,24 @@ public class AuthService {
     private Long passwordResetTokenExpiration;
 
     @Transactional
-    public void registerUser(User user, String password) throws Exception {
-        if (userRepository.existsByUsername(user.getUsername())) {
-            throw new Exception("Username is already taken!");
-        }
+    public void registerUser(User user, String password) {
+        if (userRepository.existsByUsername(user.getUsername()))
+            throw new UserAlreadyExistsException(user.getUsername());
 
-        if (userRepository.existsByEmail(user.getEmail())) {
-            throw new Exception("Email Address already in use!");
-        }
+        if (userRepository.existsByEmail(user.getEmail()))
+            throw new UserAlreadyExistsException(user.getEmail());
 
         user.setPassword(passwordEncoder.encode(password));
         user.setActive(false);
         user.setLocked(false);
         user.setFailedLoginAttempts(0);
 
-        // Assign default role
         Role userRole = roleRepository.findByName("VIEWER")
-                .orElseThrow(() -> new Exception("User Role not set."));
+                .orElseThrow(() -> new RoleNotFoundException("User Role not set."));
         user.setRoles(new HashSet<>(Arrays.asList(userRole)));
 
         userRepository.save(user);
 
-        // Generate verification token
         String token = UUID.randomUUID().toString();
         VerificationToken verificationToken = VerificationToken.builder()
                 .token(token)
@@ -80,52 +82,46 @@ public class AuthService {
                 .build();
         verificationTokenRepository.save(verificationToken);
 
-        // Send verification email
         emailService.sendVerificationEmail(user.getEmail(), token);
     }
 
-    public void verifyEmail(String token) throws Exception {
+    public void verifyEmail(String token) {
         VerificationToken verificationToken = verificationTokenRepository.findByToken(token)
-                .orElseThrow(() -> new Exception("Invalid verification token."));
+                .orElseThrow(() -> new VerificationTokenNotFoundException(token));
 
         if (verificationToken.getExpiryDate() < System.currentTimeMillis()) {
-            throw new Exception("Verification token has expired.");
+            throw new TokenExpiredException(token);
         }
 
         User user = verificationToken.getUser();
         user.setActive(true);
         userRepository.save(user);
 
-        // Optionally, delete the token after verification
         verificationTokenRepository.delete(verificationToken);
     }
 
-     @Transactional
-    public AuthResponse authenticateUserWithRefreshToken(String usernameOrEmail, String password) throws Exception {
+    @Transactional(noRollbackFor = InvalidCredentialsException.class)
+    public AuthResponse authenticateUserWithRefreshToken(String username, String password) throws Exception {
         try {
             Authentication authentication = authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(usernameOrEmail, password)
-            );
+                    new UsernamePasswordAuthenticationToken(username, password));
 
-            // Reset failed attempts
-            User user = userRepository.findByUsername(usernameOrEmail)
-                .orElse(userRepository.findByEmail(usernameOrEmail).orElse(null));
-            if (user != null) {
-                user.setFailedLoginAttempts(0);
-                userRepository.save(user);
-            }
+            User user = userRepository.findByUsername(username)
+                            .orElseThrow(() -> new UserNotFoundException(username));
+
+            user.setFailedLoginAttempts(0);
+            userRepository.save(user);
 
             String accessToken = tokenProvider.generateToken(authentication);
             RefreshToken refreshToken = refreshTokenService.createRefreshToken(user);
 
             return AuthResponse.builder()
-                .accessToken(accessToken)
-                .refreshToken(refreshToken.getToken())
-                .build();
+                    .accessToken(accessToken)
+                    .refreshToken(refreshToken.getToken())
+                    .build();
         } catch (BadCredentialsException ex) {
-            // Handle failed login attempts
-            User user = userRepository.findByUsername(usernameOrEmail)
-                .orElse(userRepository.findByEmail(usernameOrEmail).orElse(null));
+            User user = userRepository.findByUsername(username).orElse(null);
+
             if (user != null) {
                 int attempts = user.getFailedLoginAttempts() + 1;
                 user.setFailedLoginAttempts(attempts);
@@ -134,8 +130,9 @@ public class AuthService {
                 }
                 userRepository.save(user);
             }
-            throw new Exception("Invalid username or password.");
         }
+
+        throw new InvalidCredentialsException("Invalid credentials.");
     }
 
     @Transactional
@@ -161,7 +158,7 @@ public class AuthService {
                 .orElseThrow(() -> new Exception("Invalid password reset token."));
 
         if (resetToken.getExpiryDate() < System.currentTimeMillis()) {
-            throw new Exception("Password reset token has expired.");
+            throw new TokenExpiredException("Password reset token has expired.");
         }
 
         User user = resetToken.getUser();
