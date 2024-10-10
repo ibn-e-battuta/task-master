@@ -1,8 +1,10 @@
 package io.shinmen.taskmaster.security;
 
-import java.security.Key;
 import java.util.Date;
+import java.util.function.Function;
 import java.util.stream.Collectors;
+
+import javax.crypto.SecretKey;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.Authentication;
@@ -13,11 +15,9 @@ import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.ExpiredJwtException;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.MalformedJwtException;
-import io.jsonwebtoken.SignatureAlgorithm;
 import io.jsonwebtoken.UnsupportedJwtException;
+import io.jsonwebtoken.io.Decoders;
 import io.jsonwebtoken.security.Keys;
-import io.shinmen.taskmaster.entity.Permission;
-import io.shinmen.taskmaster.entity.User;
 import lombok.extern.slf4j.Slf4j;
 
 @Component
@@ -30,10 +30,6 @@ public class JwtTokenProvider {
     @Value("${app.jwt.expiration-in-ms}")
     private Long jwtExpirationInMs;
 
-    private Key getSigningKey() {
-        return Keys.hmacShaKeyFor(jwtSecret.getBytes());
-    }
-
     public String generateToken(Authentication authentication) {
         String username = authentication.getName();
 
@@ -45,48 +41,42 @@ public class JwtTokenProvider {
         Date expiryDate = new Date(now.getTime() + jwtExpirationInMs);
 
         return Jwts.builder()
-                .setSubject(username)
+                .subject(username)
                 .claim("roles", authorities)
-                .setIssuedAt(now)
-                .setExpiration(expiryDate)
-                .signWith(getSigningKey(), SignatureAlgorithm.HS512)
+                .issuedAt(now)
+                .expiration(expiryDate)
+                .signWith(getKey())
                 .compact();
     }
 
-    public String generateTokenFromUser(User user) {
-        String authorities = user.getRoles().stream()
-                .flatMap(role -> role.getPermissions().stream())
-                .map(Permission::getName)
-                .collect(Collectors.joining(","));
-
-        Date now = new Date();
-        Date expiryDate = new Date(now.getTime() + jwtExpirationInMs);
-
-        return Jwts.builder()
-                .setSubject(user.getUsername())
-                .claim("roles", authorities)
-                .setIssuedAt(now)
-                .setExpiration(expiryDate)
-                .signWith(getSigningKey(), SignatureAlgorithm.HS512)
-                .compact();
+    public String getUsernameFromToken(String token) {
+        return extractClaim(token, Claims::getSubject);
     }
 
-    public String getUsernameFromJWT(String token) {
-        Claims claims = Jwts.parserBuilder()
-                .setSigningKey(getSigningKey())
+    private <T> T extractClaim(String jwtToken, Function<Claims, T> claimsResolver) {
+        final Claims claims= extractAllClaims(jwtToken);
+        return claimsResolver.apply(claims);
+    }
+
+    private Claims extractAllClaims(String jwtToken) {
+        return Jwts.parser()
+                .verifyWith(getKey())
                 .build()
-                .parseClaimsJws(token)
-                .getBody();
-
-        return claims.getSubject();
+                .parseSignedClaims(jwtToken)
+                .getPayload();
     }
 
-    public boolean validateToken(String authToken) {
+     private SecretKey getKey() {
+        byte[] keyBytes = Decoders.BASE64.decode(jwtSecret);
+        return Keys.hmacShaKeyFor(keyBytes);
+    }
+
+    public boolean validateToken(String token) {
         try {
-            Jwts.parserBuilder()
-                .setSigningKey(getSigningKey())
+            Jwts.parser()
+                .verifyWith(getKey())
                 .build()
-                .parseClaimsJws(authToken);
+                .parseSignedClaims(token);
             return true;
         } catch (SecurityException | MalformedJwtException ex) {
             log.error("Invalid JWT signature");
