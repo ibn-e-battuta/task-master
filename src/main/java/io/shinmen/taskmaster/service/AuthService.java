@@ -24,6 +24,7 @@ import io.shinmen.taskmaster.entity.VerificationToken;
 import io.shinmen.taskmaster.exception.InvalidCredentialsException;
 import io.shinmen.taskmaster.exception.RoleNotFoundException;
 import io.shinmen.taskmaster.exception.TokenExpiredException;
+import io.shinmen.taskmaster.exception.TokenNotFoundException;
 import io.shinmen.taskmaster.exception.UserAlreadyExistsException;
 import io.shinmen.taskmaster.exception.UserNotFoundException;
 import io.shinmen.taskmaster.exception.VerificationTokenNotFoundException;
@@ -90,7 +91,7 @@ public class AuthService {
                 .orElseThrow(() -> new VerificationTokenNotFoundException(token));
 
         if (verificationToken.getExpiryDate() < System.currentTimeMillis()) {
-            throw new TokenExpiredException(token);
+            throw new TokenExpiredException(token, "Verification Token");
         }
 
         User user = verificationToken.getUser();
@@ -101,13 +102,13 @@ public class AuthService {
     }
 
     @Transactional(noRollbackFor = InvalidCredentialsException.class)
-    public AuthResponse authenticateUserWithRefreshToken(String username, String password) throws Exception {
+    public AuthResponse authenticateUserWithRefreshToken(String username, String password) {
         try {
             Authentication authentication = authenticationManager.authenticate(
                     new UsernamePasswordAuthenticationToken(username, password));
 
             User user = userRepository.findByUsername(username)
-                            .orElseThrow(() -> new UserNotFoundException(username));
+                    .orElseThrow(() -> new UserNotFoundException(username));
 
             user.setFailedLoginAttempts(0);
             userRepository.save(user);
@@ -136,9 +137,9 @@ public class AuthService {
     }
 
     @Transactional
-    public void initiatePasswordReset(String email) throws Exception {
+    public void initiatePasswordReset(String email) {
         User user = userRepository.findByEmail(email)
-                .orElseThrow(() -> new Exception("User with given email does not exist."));
+                .orElseThrow(() -> new UserNotFoundException(email));
 
         String token = UUID.randomUUID().toString();
         PasswordResetToken resetToken = PasswordResetToken.builder()
@@ -153,12 +154,12 @@ public class AuthService {
     }
 
     @Transactional
-    public void resetPassword(String token, String newPassword) throws Exception {
+    public void resetPassword(String token, String newPassword) {
         PasswordResetToken resetToken = passwordResetTokenRepository.findByToken(token)
-                .orElseThrow(() -> new Exception("Invalid password reset token."));
+                .orElseThrow(() -> new TokenNotFoundException(token));
 
         if (resetToken.getExpiryDate() < System.currentTimeMillis()) {
-            throw new TokenExpiredException("Password reset token has expired.");
+            throw new TokenExpiredException(token, "Password Reset Token");
         }
 
         User user = resetToken.getUser();

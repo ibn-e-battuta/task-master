@@ -5,6 +5,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import io.shinmen.taskmaster.entity.User;
+import io.shinmen.taskmaster.exception.SamePasswordException;
 import io.shinmen.taskmaster.exception.UserNotFoundException;
 import io.shinmen.taskmaster.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -17,15 +18,15 @@ public class UserService {
     private final BCryptPasswordEncoder passwordEncoder;
 
     @Transactional(readOnly = true)
-    public User getCurrentUser(String username) throws Exception {
+    public User getCurrentUser(String username) {
         return userRepository.findByUsername(username)
-            .orElseThrow(() -> new Exception("User not found."));
+            .orElseThrow(() -> new UserNotFoundException(username));
     }
 
     @Transactional
     public void updateProfile(String username, User updatedUser) {
         User existingUser = userRepository.findByUsername(username)
-            .orElseThrow(() -> new UserNotFoundException("User not found."));
+            .orElseThrow(() -> new UserNotFoundException(username));
 
         existingUser.setUsername(updatedUser.getUsername());
         existingUser.setEmail(updatedUser.getEmail());
@@ -35,12 +36,12 @@ public class UserService {
     }
 
     @Transactional
-    public void changePassword(String username, String currentPassword, String newPassword) throws Exception {
+    public void changePassword(String username, String currentPassword, String newPassword) {
         User user = userRepository.findByUsername(username)
-            .orElseThrow(() -> new Exception("User not found."));
+            .orElseThrow(() -> new UserNotFoundException(username));
 
         if (!passwordEncoder.matches(currentPassword, user.getPassword())) {
-            throw new Exception("Current password is incorrect.");
+            throw new SamePasswordException();
         }
 
         user.setPassword(passwordEncoder.encode(newPassword));

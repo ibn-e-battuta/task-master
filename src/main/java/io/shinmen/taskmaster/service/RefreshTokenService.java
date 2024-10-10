@@ -10,6 +10,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import io.shinmen.taskmaster.entity.RefreshToken;
 import io.shinmen.taskmaster.entity.User;
+import io.shinmen.taskmaster.exception.TokenExpiredException;
 import io.shinmen.taskmaster.repository.RefreshTokenRepository;
 import lombok.RequiredArgsConstructor;
 
@@ -24,18 +25,18 @@ public class RefreshTokenService {
 
     public RefreshToken createRefreshToken(User user) {
         RefreshToken refreshToken = RefreshToken.builder()
-            .user(user)
-            .token(UUID.randomUUID().toString())
-            .expiryDate(Instant.now().plusMillis(refreshTokenDurationMs))
-            .build();
+                .user(user)
+                .token(UUID.randomUUID().toString())
+                .expiryDate(Instant.now().plusMillis(refreshTokenDurationMs))
+                .build();
 
         return refreshTokenRepository.save(refreshToken);
     }
 
-    public RefreshToken verifyExpiration(RefreshToken token) throws Exception {
+    public RefreshToken verifyExpiration(RefreshToken token) {
         if (token.getExpiryDate().isBefore(Instant.now())) {
             refreshTokenRepository.delete(token);
-            throw new Exception("Refresh token was expired. Please make a new signin request");
+            throw new TokenExpiredException(token.getToken(), "Refresh token");
         }
 
         return token;
