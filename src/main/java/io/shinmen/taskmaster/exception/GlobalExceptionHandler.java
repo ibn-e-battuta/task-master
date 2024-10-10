@@ -1,6 +1,7 @@
 package io.shinmen.taskmaster.exception;
 
 import java.time.ZonedDateTime;
+import java.util.Collections;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -10,7 +11,6 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.context.request.WebRequest;
 
-import io.shinmen.taskmaster.dto.ApiResponse;
 import io.shinmen.taskmaster.dto.ErrorResponse;
 import lombok.extern.slf4j.Slf4j;
 
@@ -41,7 +41,8 @@ public class GlobalExceptionHandler {
     }
 
     @ExceptionHandler(InternalAuthenticationServiceException.class)
-    public ResponseEntity<ErrorResponse> handleInternalAuthenticationServiceException(final InternalAuthenticationServiceException ex) {
+    public ResponseEntity<ErrorResponse> handleInternalAuthenticationServiceException(
+            final InternalAuthenticationServiceException ex) {
         Throwable cause = ex.getCause();
 
         if (cause instanceof TaskMasterException) {
@@ -65,11 +66,14 @@ public class GlobalExceptionHandler {
 
     // Catch-all handler for other exceptions
     @ExceptionHandler(Exception.class)
-    public ResponseEntity<ApiResponse> handleAllExceptions(Exception ex, WebRequest request) {
-        ApiResponse response = ApiResponse.builder()
-            .success(false)
-            .message("An unexpected error occurred.")
-            .build();
+    public ResponseEntity<ErrorResponse> handleAllExceptions(Exception ex, WebRequest request) {
+        log.error("Unhandled exception occurred: {}", ex.getMessage(), ex);
+        ErrorResponse response = ErrorResponse.builder()
+                .status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .message("An unexpected error occurred.")
+                .timestamp(ZonedDateTime.now())
+                .details(Collections.singletonList(ex.getMessage()))
+                .build();
         return new ResponseEntity<>(response, HttpStatus.INTERNAL_SERVER_ERROR);
     }
 
