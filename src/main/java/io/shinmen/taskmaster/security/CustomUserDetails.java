@@ -22,7 +22,8 @@ public class CustomUserDetails implements UserDetails {
     private Collection<? extends GrantedAuthority> authorities;
 
     // Private constructor to enforce the use of the build method
-    private CustomUserDetails(UUID id, String username, String email, String password, boolean active, boolean locked, Collection<? extends GrantedAuthority> authorities) {
+    private CustomUserDetails(UUID id, String username, String email, String password, boolean active, boolean locked,
+            Collection<? extends GrantedAuthority> authorities) {
         this.id = id;
         this.username = username;
         this.email = email;
@@ -41,7 +42,7 @@ public class CustomUserDetails implements UserDetails {
     public static CustomUserDetails build(User user) {
         Collection<? extends GrantedAuthority> authorities = user.getRoles().stream()
                 .flatMap(role -> role.getPermissions().stream()) // Assuming Role has getPermissions()
-                .map(permission -> (GrantedAuthority) () -> permission.getName())
+                .map(permission -> (GrantedAuthority) permission::getName)
                 .collect(Collectors.toList());
 
         return new CustomUserDetails(
@@ -51,8 +52,7 @@ public class CustomUserDetails implements UserDetails {
                 user.getPassword(),
                 user.isActive(),
                 user.isLocked(),
-                authorities
-        );
+                authorities);
     }
 
     // Implementations of UserDetails interface methods
